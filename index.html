@@ -172,7 +172,7 @@ dialog .toast{position:fixed}
     <option value="age">आयु (अधिक → कम)</option>
   </select>
   <select id="view"><option value="fam">परिवार (वंशावली)</option><option value="card">कार्ड</option><option value="table">तालिका</option></select></div>
-  <div class="tools"><button type="button" id="bkSave">💾 पक्ष/विपक्ष बैकअप</button><label class="btn" for="bkLoad">📂 बैकअप लोड करें</label><input type="file" id="bkLoad" accept=".json,application/json" hidden></div>
+  <div class="tools"><button type="button" id="bkSave">💾 पक्ष/विपक्ष बैकअप</button><label class="btn" for="bkLoad">📂 बैकअप लोड करें</label><input type="file" id="bkLoad" hidden></div>
 </div>
 <main>
   <div id="out"></div>
@@ -881,8 +881,8 @@ $("bkSave").addEventListener("click", () => {
   const n = Object.keys(STATUS).length; if(!n){ toast("अभी कोई पक्ष/विपक्ष दर्ज नहीं है।"); return; }
   const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({type:"voter-status", saved:d.toISOString(), status:STATUS})], {type:"application/json"}));
-  a.download = `paksh_vipaksh_backup_${stamp}.json`; document.body.appendChild(a); a.click(); a.remove();
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({type:"voter-status", saved:d.toISOString(), status:STATUS})], {type:"text/plain"}));
+  a.download = `paksh_vipaksh_backup_${stamp}.txt`; document.body.appendChild(a); a.click(); a.remove();
   toast(`💾 ${n} मतदाताओं की स्थिति का बैकअप डाउनलोड हुआ`);
 });
 $("bkLoad").addEventListener("change", e => {
@@ -892,8 +892,9 @@ $("bkLoad").addEventListener("change", e => {
     try{
       const j = JSON.parse(fr.result), s = j.status || j; let n = 0;
       for(const k in s) if(/^\d+-\d+$/.test(k) && ST_LABEL[s[k]]){ STATUS[k] = s[k]; n++; }
+      if(!n){ toast("इस फ़ाइल में कोई पक्ष/विपक्ष जानकारी नहीं मिली।", 5000); return; }
       saveStatus(); run(); toast(`📂 ${n} मतदाताओं की स्थिति लोड हुई`);
-    }catch(err){ toast("यह बैकअप फ़ाइल सही नहीं है।"); }
+    }catch(err){ toast("यह पक्ष/विपक्ष बैकअप फ़ाइल नहीं है — paksh_vipaksh_backup_… वाली फ़ाइल चुनें।", 6000); }
   };
   fr.readAsText(f); e.target.value = "";
 });

@@ -13,7 +13,7 @@ header{background:var(--card);border-bottom:1px solid var(--line);position:stick
 h1{font-size:18px;margin:0 0 10px;letter-spacing:.2px}
 h1 span{color:var(--mute);font-weight:400;font-size:13px;margin-left:6px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media (min-width:760px){.grid{grid-template-columns:1.4fr 1.4fr 1fr 1fr 1fr auto}}
+@media (min-width:760px){.grid{grid-template-columns:1.3fr 1.3fr 1.1fr 1fr 1fr 1fr auto}}
 label{display:block;font-size:12px;color:var(--mute);margin-bottom:3px}
 input,select,button{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:42px}
 input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:transparent}
@@ -158,6 +158,7 @@ dialog .toast{position:fixed}
   <div class="grid">
     <div><label for="qName">मतदाता का नाम</label><input id="qName" type="search" placeholder="हिंदी या English (mohan)" autocomplete="off"></div>
     <div><label for="qRel">पिता / पति / अन्य का नाम</label><input id="qRel" type="search" placeholder="हिंदी या English (ramesh)" autocomplete="off"></div>
+    <div><label for="qId">वोटर ID (EPIC)</label><input id="qId" type="search" placeholder="पूरा या आधा ID" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
     <div><label for="qCaste">जाति</label><select id="qCaste"></select></div>
     <div><label for="qWard">वार्ड नं.</label><select id="qWard"></select></div>
     <div><label for="qSt">पक्ष / विपक्ष</label><select id="qSt"><option value="">सभी</option><option value="p">पक्ष</option><option value="v">विपक्ष</option><option value="d">डांवाडोल</option><option value="none">तय नहीं</option></select></div>
@@ -171,7 +172,7 @@ dialog .toast{position:fixed}
     <option value="name">नाम (अ–ज्ञ)</option>
     <option value="age">आयु (अधिक → कम)</option>
   </select>
-  <select id="view"><option value="fam">परिवार (वंशावली)</option><option value="card">कार्ड</option><option value="table">तालिका</option></select></div>
+  <select id="view"><option value="card" selected>कार्ड</option><option value="fam">परिवार (वंशावली)</option><option value="table">तालिका</option></select></div>
   <div class="tools"><button type="button" id="bkSave">💾 पक्ष/विपक्ष बैकअप</button><label class="btn" for="bkLoad">📂 बैकअप लोड करें</label><input type="file" id="bkLoad" hidden></div>
 </div>
 <main>
@@ -438,7 +439,16 @@ function soundKey(s){
 const isLatin = s => /[a-z]/i.test(s);
 const qKey = q => isLatin(q) ? {en:true, k:soundKey(q)} : {en:false, k:norm(q)};
 const hit = (r, f, q) => !q.k || (q.en ? r[f+"k"].includes(q.k) : r[f].includes(q.k));
-DATA.forEach((r,i) => { r.i = i; r.nn = norm(r[3]); r.rn = norm(r[5]); r.nnk = soundKey(toRoman(r[3])); r.rnk = soundKey(toRoman(r[5])); });
+const idKey = s => (s||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+function hlId(id, q){
+  if(!q) return esc(id);
+  // map positions of the alphanumeric characters back into the original ID
+  const map = []; for(let i=0;i<id.length;i++) if(/[A-Za-z0-9]/.test(id[i])) map.push(i);
+  const k = idKey(id).indexOf(q); if(k < 0) return esc(id);
+  const s = map[k], e = map[k+q.length-1]+1;
+  return esc(id.slice(0,s)) + "<mark>" + esc(id.slice(s,e)) + "</mark>" + esc(id.slice(e));
+}
+DATA.forEach((r,i) => { r.idk = idKey(r[2]); r.i = i; r.nn = norm(r[3]); r.rn = norm(r[5]); r.nnk = soundKey(toRoman(r[3])); r.rnk = soundKey(toRoman(r[5])); });
 
 // dropdowns
 const casteCount = {}, wardCount = {};
@@ -486,11 +496,11 @@ function tally(){
   $("tally").innerHTML = (c.p||c.v||c.d) ? `<span class="vs vs-p">पक्ष ${c.p}</span><span class="vs vs-v">विपक्ष ${c.v}</span><span class="vs vs-d">डांवाडोल ${c.d}</span>` : "";
 }
 function run(){
-  const qn = qKey($("qName").value), qr = qKey($("qRel").value), c = $("qCaste").value, w = $("qWard").value;
+  const qn = qKey($("qName").value), qr = qKey($("qRel").value), c = $("qCaste").value, w = $("qWard").value, qi = idKey($("qId").value);
   results = DATA.filter(r =>
     (!w || r[0]==w) &&
     (!c || (c===BLANK ? !r[10] : r[10]===c)) &&
-    hit(r,"nn",qn) && hit(r,"rn",qr) &&
+    hit(r,"nn",qn) && hit(r,"rn",qr) && (!qi || r.idk.includes(qi)) &&
     (!$("qSt").value || ($("qSt").value === "none" ? !stOf(r) : stOf(r) === $("qSt").value)));
   const s = $("sort").value;
   if(s==="name") results.sort((a,b)=>a[3].localeCompare(b[3],"hi"));
@@ -505,18 +515,19 @@ function run(){
 function render(){
   const qn = isLatin($("qName").value) ? "" : norm($("qName").value), qr = isLatin($("qRel").value) ? "" : norm($("qRel").value);
   const slice = results.slice(shown, shown+PAGE);
+  const qiH = idKey($("qId").value);
   const table = $("view").value==="table";
   if(!results.length){ $("out").innerHTML = `<div class="empty">कोई मतदाता नहीं मिला।<br>नाम का छोटा हिस्सा लिखकर देखें।</div>`; $("more").hidden=true; return; }
   if($("view").value === "fam"){ renderFam(); return; }
   if(table){
     let tb = $("out").querySelector("tbody");
     if(!tb){ $("out").innerHTML = `<div class="tablewrap"><table><thead><tr><th>वार्ड</th><th>क्र.</th><th>नाम</th><th>संबंध</th><th>पिता/पति/अन्य</th><th>मकान</th><th>आयु</th><th>लिंग</th><th>जाति</th><th>वोटर ID</th><th>स्थिति</th><th>पर्ची</th></tr></thead><tbody></tbody></table></div>`; tb=$("out").querySelector("tbody"); }
-    tb.insertAdjacentHTML("beforeend", slice.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[1])}</td><td><b>${hl(r[3],qn)}</b></td><td>${esc(r[4])}</td><td>${hl(r[5],qr)}</td><td>${esc(r[6])}</td><td>${esc(r[7])}</td><td>${esc(r[8])}</td><td>${esc(r[10]||"—")}</td><td class="vid">${esc(r[2])}</td><td>${r[9]==="मूल सूची"?"":esc(r[9])}</td><td>${vsPill(r)} <button type="button" class="famb" data-i="${r.i}">👪</button> <button type="button" class="wa" data-i="${r.i}">${WAICON}भेजें</button></td></tr>`).join(""));
+    tb.insertAdjacentHTML("beforeend", slice.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[1])}</td><td><b>${hl(r[3],qn)}</b></td><td>${esc(r[4])}</td><td>${hl(r[5],qr)}</td><td>${esc(r[6])}</td><td>${esc(r[7])}</td><td>${esc(r[8])}</td><td>${esc(r[10]||"—")}</td><td class="vid">${hlId(r[2],qiH)}</td><td>${r[9]==="मूल सूची"?"":esc(r[9])}</td><td>${vsPill(r)} <button type="button" class="famb" data-i="${r.i}">👪</button> <button type="button" class="wa" data-i="${r.i}">${WAICON}भेजें</button></td></tr>`).join(""));
   } else {
     let list = $("out").querySelector(".list");
     if(!list){ $("out").innerHTML = `<div class="list"></div>`; list=$("out").querySelector(".list"); }
     list.insertAdjacentHTML("beforeend", slice.map(r=>`<div class="card">
-      <div class="top"><div class="nm">${hl(r[3],qn)}</div><div class="vid">${esc(r[2])}</div></div>
+      <div class="top"><div class="nm">${hl(r[3],qn)}</div><div class="vid">${hlId(r[2],qiH)}</div></div>
       <div class="rel">${esc(r[4])}: <b>${hl(r[5],qr)}</b></div>
       <div class="chips"><span class="c w">वार्ड ${r[0]}</span><span class="c">मकान ${esc(r[6])}</span><span class="c">क्र. ${esc(r[1])}</span><span class="c">${esc(r[7])} वर्ष · ${esc(r[8])}</span>${r[10]?`<span class="c k">${esc(r[10])}</span>`:""}${r[9]&&r[9]!=="मूल सूची"?`<span class="c st">${esc(r[9])}</span>`:""}<span class="c">पृष्ठ ${esc(r[11])}</span>${vsPill(r)}</div>
       <div class="cardfoot"><button type="button" class="famb" data-i="${r.i}">👪 परिवार</button><button type="button" class="wa" data-i="${r.i}">${WAICON}WhatsApp पर्ची</button></div>
@@ -527,10 +538,10 @@ function render(){
   $("more").textContent = `और दिखाएँ (${results.length - shown} बाकी)`;
 }
 let t; const deb = () => { clearTimeout(t); t = setTimeout(run, 150); };
-$("qName").addEventListener("input", deb); $("qRel").addEventListener("input", deb);
+$("qName").addEventListener("input", deb); $("qRel").addEventListener("input", deb); $("qId").addEventListener("input", deb);
 ["qCaste","qWard","qSt","sort","view"].forEach(id=>$(id).addEventListener("change", run));
 $("more").addEventListener("click", render);
-$("reset").addEventListener("click", ()=>{ $("qName").value=$("qRel").value=""; $("qCaste").value=$("qWard").value=$("qSt").value=""; run(); });
+$("reset").addEventListener("click", ()=>{ $("qName").value=$("qRel").value=$("qId").value=""; $("qCaste").value=$("qWard").value=$("qSt").value=""; run(); });
 
 // ---------- WhatsApp voter slip ----------
 const SETS = ["sTitle","sBooth","sDate","sFrom"];
@@ -812,7 +823,7 @@ function renderFam(){
   // which trees to show (one card per family tree), in the order of the results
   if(shown === 0){
     TREES = []; famList = []; famShownTrees = 0;
-    const named = !!($("qName").value.trim() || $("qRel").value.trim());
+    const named = !!($("qName").value.trim() || $("qRel").value.trim() || $("qId").value.trim());
     const seen = new Map();
     results.forEach(r => {
       const root = rootOf(r.node);
@@ -823,7 +834,7 @@ function renderFam(){
   }
   const box = $("out").querySelector(".fams");
   const PAGE_T = 15, slice = famList.slice(famShownTrees, famShownTrees + PAGE_T);
-  const named = !!($("qName").value.trim() || $("qRel").value.trim());
+  const named = !!($("qName").value.trim() || $("qRel").value.trim() || $("qId").value.trim());
   box.insertAdjacentHTML("beforeend", slice.map(e => famCard(e.h, e.root, e.me, named ? e.hits : null)).join(""));
   box.querySelectorAll(".fam").forEach(f => { if(!f.querySelector(".legend").innerHTML) updLegend(f); });
   famShownTrees += slice.length; shown = famShownTrees ? 1 : 0;
